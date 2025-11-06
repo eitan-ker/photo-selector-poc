@@ -48,6 +48,7 @@ export class JinaClipSearch {
         device: 'cpu',
         // As per model docs, q4 is supported in Transformers.js
         // If you hit issues, remove dtype.
+        dtype: 'q4'
       });
 
       this.isInitialized = true;
@@ -95,35 +96,72 @@ export class JinaClipSearch {
     return s;
   }
 
+  // private async getImageEmbeddings(images: RawImage[]): Promise<number[][]> {
+  //
+  //   this.ensureInitialized();
+  //   const inputs = await this.processor!(undefined as any, images, { padding: true });
+  //   const outputs = await this.model!(inputs) as any;
+  //
+  //
+  //   // Prefer normalized outputs as per model card
+  //   if (outputs?.l2norm_image_embeddings) {
+  //     const arr = this.tensor2DToArrays(outputs.l2norm_image_embeddings as Tensor);
+  //     return arr.map((v) => this.normalize(v));
+  //   }
+  //   // Fallbacks if normalization wasn’t returned
+  //   if (outputs?.image_embeds) {
+  //     const arr = this.tensor2DToArrays(outputs.image_embeds as Tensor);
+  //     return arr.map((v) => this.normalize(v));
+  //   }
+  //   if (outputs?.image_embeddings) {
+  //     const arr = this.tensor2DToArrays(outputs.image_embeddings as Tensor);
+  //     return arr.map((v) => this.normalize(v));
+  //   }
+  //
+  //   throw new Error('Model did not return image embeddings (l2norm_image_embeddings/image_embeds/image_embeddings).');
+  // }
+
+
+
+// In JinaClipSearch.ts, modify getImageEmbeddings:
   private async getImageEmbeddings(images: RawImage[]): Promise<number[][]> {
-
     this.ensureInitialized();
-    const inputs = await this.processor!(undefined as any, images, { padding: true });
-    const outputs = await this.model!(inputs) as any;
 
+    // Process images individually for better quality
+    const embeddings: number[][] = [];
 
-    // Prefer normalized outputs as per model card
-    if (outputs?.l2norm_image_embeddings) {
-      const arr = this.tensor2DToArrays(outputs.l2norm_image_embeddings as Tensor);
-      return arr.map((v) => this.normalize(v));
-    }
-    // Fallbacks if normalization wasn’t returned
-    if (outputs?.image_embeds) {
-      const arr = this.tensor2DToArrays(outputs.image_embeds as Tensor);
-      return arr.map((v) => this.normalize(v));
-    }
-    if (outputs?.image_embeddings) {
-      const arr = this.tensor2DToArrays(outputs.image_embeddings as Tensor);
-      return arr.map((v) => this.normalize(v));
+    for (const image of images) {
+      const inputs = await this.processor!(undefined as any, [image], {
+        padding: true
+      });
+      const outputs = await this.model!(inputs) as any;
+
+      let embedding: number[];
+      if (outputs?.l2norm_image_embeddings) {
+        const arr = this.tensor2DToArrays(outputs.l2norm_image_embeddings as Tensor);
+        embedding = this.normalize(arr[0]);
+      } else if (outputs?.image_embeds) {
+        const arr = this.tensor2DToArrays(outputs.image_embeds as Tensor);
+        embedding = this.normalize(arr[0]);
+      } else if (outputs?.image_embeddings) {
+        const arr = this.tensor2DToArrays(outputs.image_embeddings as Tensor);
+        embedding = this.normalize(arr[0]);
+      } else {
+        throw new Error('Model did not return image embeddings');
+      }
+
+      embeddings.push(embedding);
     }
 
-    throw new Error('Model did not return image embeddings (l2norm_image_embeddings/image_embeds/image_embeddings).');
+    return embeddings;
   }
+
+
 
   private async getTextEmbedding(text: string): Promise<number[]> {
     this.ensureInitialized();
-    const prefix = 'Represent the query for retrieving evidence documents: ';
-    const inputs = await this.processor!([prefix + text], undefined as any, { padding: true, truncation: true });
+    // const prefix = 'Represent the query for retrieving evidence documents: ';
+    const inputs = await this.processor!([text], undefined as any, { padding: true, truncation: true });
     const outputs = await this.model!(inputs) as any;
 
     // Prefer normalized outputs as per model card

@@ -5,7 +5,7 @@ import type { SearchConfig } from './types.js';
 async function main() {
   const config: SearchConfig = {
     imageFolder: './images',
-    query: 'image of dogs',
+    query: 'tennis',
     threshold: 0.0,
     maxResults: 20
   };
