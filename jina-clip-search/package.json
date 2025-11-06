@@ -1,0 +1,33 @@
+{
+  "name": "jina-clip-image-search",
+  "version": "1.0.0",
+  "description": "Image search using Jina-CLIP V2 and TypeScript",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "jina-clip",
+    "image-search",
+    "ai",
+    "machine-learning"
+  ],
+  "author": "Wix",
+  "license": "MIT",
+  "dependencies": {
+    "@huggingface/transformers": "^3.1.0",
+    "onnxruntime-node": "^1.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
