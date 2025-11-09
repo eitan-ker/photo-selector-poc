@@ -5,16 +5,18 @@ import type { SearchConfig } from './types.js';
 async function main() {
   const config: SearchConfig = {
     imageFolder: './images',
-    query: 'tennis',
-    threshold: 0.0,
-    maxResults: 20
+    query: 'dogs',
+    threshold: 0.3,
+    maxResults: 20,
+    enableAuxScorer: true,  // Enable semantic label fusion
+    fusionWeight: 0.3       // 70% Image + 30% Label similarity
   };
 
   try {
-    console.log('🚀 Jina-CLIP Image Search POC\n');
+    console.log('🚀 Jina-CLIP Image Search POC with Semantic Label Fusion\n');
 
     const searcher = new JinaClipSearch();
-    await searcher.initialize();
+    await searcher.initialize(config.enableAuxScorer);
 
     const info = searcher.getModelInfo();
     console.log(`Model: ${info.modelId} | Initialized: ${info.isInitialized} | Backend: ${info.backend}`);
@@ -24,6 +26,14 @@ async function main() {
     }
 
     const response = await searcher.search(config);
+    // 👇 Add this block
+    console.log('\n📋 EXTRACTED FEATURES SUMMARY:\n');
+    response.results.forEach((r) => {
+      if (r.predictedLabels && r.predictedLabels.length > 0) {
+        console.log(`${r.fileName}: ${r.predictedLabels.join(', ')}`);
+      }
+    });
+    console.log('');
     printResults(response.results, response.stats);
 
     // Example multi-query usage:

@@ -90,6 +90,18 @@ export function printResults(results: SearchResult[], stats: SearchStats): void 
   results.forEach((result) => {
     console.log(`${result.rank}. ${result.fileName}`);
     console.log(`   📊 Similarity: ${formatPercentage(result.similarity)} (${result.similarity.toFixed(4)})`);
+    
+    // Show fusion breakdown if available
+    if (result.clipScore !== undefined && result.auxScore !== undefined) {
+      console.log(`      ├─ Image: ${formatPercentage(result.clipScore)} (${result.clipScore.toFixed(4)})`);
+      console.log(`      └─ Label: ${formatPercentage(result.auxScore)} (${result.auxScore.toFixed(4)})`);
+    }
+    
+    // Show predicted labels if available
+    if (result.predictedLabels && result.predictedLabels.length > 0) {
+      console.log(`   🏷️  Labels: ${result.predictedLabels.join(', ')}`);
+    }
+    
     console.log(`   📁 Path: ${result.imagePath}`);
     console.log('');
   });

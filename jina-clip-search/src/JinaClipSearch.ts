@@ -9,6 +9,7 @@ import {
 import { basename } from 'path';
 import { getImageFiles } from './utils.js';
 import type { SearchConfig, SearchResult, SearchResponse } from './types.js';
+import { MobileNetScorer } from './MobileNetScorer.js';
 
 // Optional: log ONNX Runtime availability/version
 let ortInfo = '';
@@ -23,10 +24,11 @@ try {
 export class JinaClipSearch {
   private model: PreTrainedModel | null = null;
   private processor: Processor | null = null;
+  private auxScorer: MobileNetScorer | null = null;
   private readonly modelId = 'jinaai/jina-clip-v2';
   private isInitialized = false;
 
-  async initialize(): Promise<void> {
+  async initialize(enableAuxScorer: boolean = true): Promise<void> {
     if (this.isInitialized) {
       console.log('⚠️  Model already initialized');
       return;
@@ -51,9 +53,18 @@ export class JinaClipSearch {
         dtype: 'q4'
       });
 
+      // Mark as initialized BEFORE loading MobileNet (which needs text embeddings)
       this.isInitialized = true;
+
       const loadTime = Date.now() - startTime;
-      console.log(`✅ Model loaded: ${this.modelId} in ${(loadTime / 1000).toFixed(2)}s\n`);
+      console.log(`✅ CLIP model loaded: ${this.modelId} in ${(loadTime / 1000).toFixed(2)}s\n`);
+
+      // Initialize auxiliary scorer if enabled (after CLIP is ready)
+      if (enableAuxScorer) {
+        this.auxScorer = new MobileNetScorer();
+        // Pass text embedding function for label pre-computation
+        await this.auxScorer.initialize((text: string) => this.getTextEmbedding(text));
+      }
     } catch (error) {
       console.error('❌ Failed to load model:', error);
       throw new Error('Model initialization failed');
@@ -193,7 +204,14 @@ export class JinaClipSearch {
   async search(config: SearchConfig): Promise<SearchResponse> {
     this.ensureInitialized();
 
-    const { imageFolder, query, threshold = 0.3, maxResults = 100 } = config;
+    const {
+      imageFolder,
+      query,
+      threshold = 0.3,
+      maxResults = 100,
+      enableAuxScorer = true,
+      fusionWeight = 0.3  // 70% image + 30% label similarity
+    } = config;
     const startTime = Date.now();
 
     console.log(`🔍 Searching in: ${imageFolder}`);
@@ -214,26 +232,45 @@ export class JinaClipSearch {
     console.log(`📸 Found ${imagePaths.length} image(s)`);
     console.log(`💬 Query: "${query}"`);
     console.log(`⚙️  Similarity threshold: ${threshold}`);
+    if (enableAuxScorer && this.auxScorer) {
+      console.log(`🔗 Semantic fusion: Image weight=${(1 - fusionWeight).toFixed(2)}, Label weight=${fusionWeight.toFixed(2)}`);
+    }
     console.log('🔄 Processing...\n');
 
     const images = await Promise.all(imagePaths.map((p) => RawImage.read(p)));
 
-    console.log('🔄 Processing image embedding...\n');
+    console.log('🔄 Processing image embeddings...\n');
     const imageEmbeddings = await this.getImageEmbeddings(images);
 
     console.log('🔄 Processing text embedding...\n');
     const textEmbedding = await this.getTextEmbedding(query);
 
-
     const results: SearchResult[] = [];
+    const useAuxScorer = enableAuxScorer && this.auxScorer;
+
     for (let i = 0; i < imagePaths.length; i++) {
-      const similarity = this.dot(imageEmbeddings[i], textEmbedding);
-      if (similarity >= threshold) {
+      const clipScore = this.dot(imageEmbeddings[i], textEmbedding);
+
+      let finalScore = clipScore;
+      let auxScore = 0.0;
+      let predictedLabels: string[] | undefined;
+
+      // Apply semantic fusion if auxiliary scorer is enabled
+      if (useAuxScorer) {
+        predictedLabels = await this.auxScorer!.getTopLabels(images[i], 20);
+        auxScore = this.auxScorer!.computeSemanticScore(predictedLabels, textEmbedding);
+        finalScore = (1 - fusionWeight) * clipScore + fusionWeight * auxScore;
+      }
+
+      if (finalScore >= threshold) {
         results.push({
           imagePath: imagePaths[i],
-          similarity,
+          similarity: finalScore,
           fileName: basename(imagePaths[i]),
-          rank: 0
+          rank: 0,
+          clipScore,
+          auxScore: useAuxScorer ? auxScore : undefined,
+          predictedLabels: useAuxScorer ? predictedLabels : undefined
         });
       }
     }

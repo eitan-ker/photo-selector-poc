@@ -13,6 +13,15 @@ export interface SearchResult {
 
   /** Rank in the results (1-based) */
   rank: number;
+
+  /** CLIP similarity score (before fusion) */
+  clipScore?: number;
+
+  /** Auxiliary score from MobileNet (before fusion) */
+  auxScore?: number;
+
+  /** Top predicted labels from MobileNet */
+  predictedLabels?: string[];
 }
 
 /**
@@ -30,6 +39,12 @@ export interface SearchConfig {
 
   /** Maximum number of results to return */
   maxResults?: number;
+
+  /** Enable MobileNet auxiliary scoring (default: true) */
+  enableAuxScorer?: boolean;
+
+  /** Weight for auxiliary score in fusion (default: 0.3) */
+  fusionWeight?: number;
 }
 
 /**
